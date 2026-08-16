@@ -21,6 +21,7 @@ export interface BuildBodyOptions {
     system: string;
     maxTokens: number;
     temperature?: number;
+    stop?: readonly string[];
     thinking?: {
         type: 'enabled';
         budget_tokens: number;

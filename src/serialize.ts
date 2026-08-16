@@ -49,6 +49,7 @@ export interface BuildBodyOptions {
   system: string
   maxTokens: number
   temperature?: number
+  stop?: readonly string[]
   thinking?: { type: 'enabled'; budget_tokens: number }
   threadId: string
 }
@@ -65,6 +66,7 @@ export function buildBody(options: BuildBodyOptions): Record<string, unknown> {
     stream: true,
   }
   if (options.thinking !== undefined) params.thinking = options.thinking
+  if (options.stop !== undefined && options.stop.length > 0) params.stop = options.stop
   return {
     config: STATIC_CONFIG,
     memory: null,
