@@ -58,14 +58,14 @@ export async function* streamRequest(
       for (const line of lines) {
         const event = parseEventLine(line)
         if (event === undefined) continue
-        if (event.type === 'finish') sawFinish = true
+        if (event.type === 'finish' || event.type === 'error') sawFinish = true
         yield* translator.feed(event)
       }
     }
     if (buffer.trim() !== '') {
       const event = parseEventLine(buffer)
       if (event !== undefined) {
-        if (event.type === 'finish') sawFinish = true
+        if (event.type === 'finish' || event.type === 'error') sawFinish = true
         yield* translator.feed(event)
       }
     }
