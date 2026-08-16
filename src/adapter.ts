@@ -4,7 +4,7 @@
 // only stream() is required. Transport lives in request.ts; the request body
 // is built by serialize.ts over the message translation from messages.ts.
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { LlmAdapter, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type {
   GenerateOptions,
@@ -93,7 +93,9 @@ export class CommandCodeAdapter extends LlmAdapter {
       stop: options.stop,
       thinking: mapThinking(options.reasoningEffort, config),
       // A stable thread id per session keeps the proxy's prefix cache warm.
-      threadId: options.sessionId !== undefined ? String(options.sessionId) : randomUUID(),
+      // CommandCode validates threadId as a UUID, so the raw harness session
+      // id (an arbitrary string) is mapped to a deterministic UUID instead.
+      threadId: threadIdFor(options.sessionId !== undefined ? String(options.sessionId) : undefined),
     })
 
     const timeoutSignal = AbortSignal.timeout(config.streamIdleTimeoutMs)
@@ -120,4 +122,19 @@ function mapThinking(
   const budget = config.thinkingBudgets[effort]
   if (budget === undefined) return undefined
   return { type: 'enabled', budget_tokens: budget }
+}
+
+/**
+ * CommandCode validates `threadId` as a UUID, but the harness session id is an
+ * arbitrary string (e.g. `session-<uuid>`). Derive a deterministic UUID v5
+ * from it (sha1-based, RFC 4122), so the thread stays stable per session —
+ * the prefix-cache warmth the raw id was meant to provide — and always valid.
+ */
+function threadIdFor(sessionId: string | undefined): string {
+  if (sessionId === undefined) return randomUUID()
+  const digest = createHash('sha1').update(sessionId).digest()
+  digest[6] = (digest[6]! & 0x0f) | 0x50 // version 5
+  digest[8] = (digest[8]! & 0x3f) | 0x80 // variant 10xx
+  const hex = digest.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
 }

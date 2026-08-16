@@ -38,7 +38,7 @@ export const Config: z<RawCommandCodeConfig> = z.object({
   /** Deployment default effort: off | high | max (omitted ⇒ high). */
   reasoningEffort: z.union(['off', 'high', 'max']),
   /** effort → budget_tokens for the CommandCode `thinking` parameter. */
-  thinkingBudgets: z.dict(z.number().step(1).min(1)).default({ high: 2048, max: 8192 }),
+  thinkingBudgets: z.dict(z.number().step(1).min(1)),
   /** Extra headers merged into every provider request (plain strings). */
   headers: z.dict(z.string()).default({}),
   /** Bounds one outstanding provider read; five-minute default. */
@@ -61,7 +61,11 @@ export function normalizeConfig(raw: RawCommandCodeConfig = {}): CommandCodeConf
     defaultContextWindow: raw.defaultContextWindow ?? 262144,
     defaultMaxTokens: raw.defaultMaxTokens ?? 32768,
     reasoningEffort: raw.reasoningEffort,
-    thinkingBudgets: { ...(raw.thinkingBudgets ?? { high: 2048, max: 8192 }) },
+    // Budgets are defaulted here, not in the schema: the harness freezes the
+    // settings `base` layer, and schemastery's dict validator self-assigns
+    // every key back onto the input (`data[key] = data[key]`), which throws
+    // "Cannot assign to read only property" on a non-empty defaulted dict.
+    thinkingBudgets: { high: 2048, max: 8192, ...(raw.thinkingBudgets ?? {}) },
     headers: { ...(raw.headers ?? {}) },
     streamIdleTimeoutMs: raw.streamIdleTimeoutMs ?? 300000,
     retryPolicy: raw.retryPolicy !== undefined ? resolveRetryPolicy(raw.retryPolicy, 'llm-commandcode.retryPolicy') : undefined,
