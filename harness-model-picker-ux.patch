@@ -1,0 +1,487 @@
+diff --git a/packages/client/ui-settings-models/src/client/ModelListEditor.tsx b/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
+index 6d88484ac5..0b6433262a 100644
+--- a/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
++++ b/packages/client/ui-settings-models/src/client/ModelListEditor.tsx
+@@ -14,10 +14,12 @@
+  * rows the user can still fill in by hand.
+  */
+ 
+-import { useState } from 'react'
+-import type { ReactNode } from 'react'
++import { useEffect, useRef, useState } from 'react'
++import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+ import type { DiscoveredModelView, IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
+-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
++import {
++  Button, IconCheckOutline14, IconCloseOutline16, IconSearchOutline16, Modal,
++} from '@deepseek-ai/dsh-client-ui-primitives'
+ import { formatCapacity, parseCapacity } from './DeepSeekModelsEditor.tsx'
+ import type { DeepSeekModelDraft } from './DeepSeekModelsEditor.tsx'
+ import { messageOf } from './store.ts'
+@@ -174,6 +176,11 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+   // FIELD: a single buffer would be displaced by editing any other field, and
+   // the abandoned one would render its stored NaN as the literal `NaN`.
+   const [editing, setEditing] = useState<ReadonlyMap<string, string>>(new Map())
++  // The picker's search filter and its two focusable controls: the search box
++  // and the tri-state master checkbox (whose `indeterminate` React cannot set).
++  const [filter, setFilter] = useState('')
++  const searchRef = useRef<HTMLInputElement>(null)
++  const masterRef = useRef<HTMLInputElement>(null)
+ 
+   /** Buffer key for one capacity field; the row half moves when rows do. */
+   const bufferKey = (index: number, field: CapacityField): string => `${String(index)}:${field}`
+@@ -250,6 +257,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+       // Everything already configured starts unchecked, so adopting a
+       // selection never silently rewrites a capacity the user corrected.
+       const known = new Set(models.map(model => textOf(model, 'id')))
++      setFilter('')
+       setCandidates(found)
+       setPicked(new Set(found.filter(model => !known.has(model.id)).map(model => model.id)))
+     } catch (error) {
+@@ -264,6 +272,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+   const closePicker = (): void => {
+     setCandidates(undefined)
+     setPicked(new Set())
++    setFilter('')
+   }
+ 
+   const adoptPicked = (): void => {
+@@ -290,6 +299,67 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+     })
+   }
+ 
++  // ---- Picker search, bulk selection, and live counts ---------------------
++
++  const query = filter.trim().toLowerCase()
++  /** Candidates matching the active filter, in endpoint order. */
++  const filtered = (candidates ?? []).filter(candidate =>
++    query.length === 0
++    || candidate.id.toLowerCase().includes(query)
++    || (candidate.name ?? '').toLowerCase().includes(query))
++  const visibleIds = filtered.map(candidate => candidate.id)
++  const allVisiblePicked = visibleIds.length > 0 && visibleIds.every(id => picked.has(id))
++  const someVisiblePicked = visibleIds.some(id => picked.has(id))
++  const totalCount = candidates?.length ?? 0
++
++  // Focus the search box the moment the picker opens.
++  useEffect(() => {
++    if (candidates !== undefined) searchRef.current?.focus()
++  }, [candidates])
++
++  // React cannot write `indeterminate`; keep the master checkbox honest.
++  useEffect(() => {
++    if (masterRef.current !== null) {
++      masterRef.current.indeterminate = someVisiblePicked && !allVisiblePicked
++    }
++  }, [someVisiblePicked, allVisiblePicked])
++
++  const pickVisible = (ids: readonly string[]): void => {
++    setPicked((current) => {
++      const next = new Set(current)
++      for (const id of ids) next.add(id)
++      return next
++    })
++  }
++
++  const clearVisible = (ids: readonly string[]): void => {
++    setPicked((current) => {
++      const next = new Set(current)
++      for (const id of ids) next.delete(id)
++      return next
++    })
++  }
++
++  /** Master checkbox: with a filter active it governs only the visible rows. */
++  const toggleAllVisible = (): void => {
++    if (allVisiblePicked) clearVisible(visibleIds)
++    else pickVisible(visibleIds)
++  }
++
++  /** Cmd/Ctrl+A selects every visible candidate while the picker is open. */
++  const onPickerKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
++    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
++      event.preventDefault()
++      pickVisible(visibleIds)
++    }
++  }
++
++  // With a filter active the visible count is the useful signal (the picked
++  // total already lives in the footer button); without one, the picked count.
++  const countText = query.length > 0
++    ? t('fetchVisibleCount').replace('{n}', String(filtered.length)).replace('{total}', String(totalCount))
++    : t('fetchSelectedCount').replace('{n}', String(picked.size)).replace('{total}', String(totalCount))
++
+   // A route the adapter already describes answers without an endpoint; only a
+   // draft with neither has nothing to ask about.
+   const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
+@@ -441,27 +511,115 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
+         footer={(
+           <>
+             <Button variant="outline" onClick={closePicker}>{t('cancel')}</Button>
+-            <Button variant="outline" onClick={adoptPicked}>{t('fetchAdopt')}</Button>
++            <Button
++              variant="outline"
++              disabled={picked.size === 0}
++              onClick={adoptPicked}
++            >
++              {picked.size > 0
++                ? t('fetchAdoptCount').replace('{n}', String(picked.size))
++                : t('fetchAdopt')}
++            </Button>
+           </>
+         )}
+       >
+-        <ul className={styles['candidateList']}>
+-          {(candidates ?? []).map(candidate => (
+-            <li key={candidate.id} className={styles['candidate']}>
+-              <label className={styles['candidateLabel']}>
+-                <input
+-                  type="checkbox"
+-                  checked={picked.has(candidate.id)}
+-                  onChange={() => { toggle(candidate.id) }}
+-                />
+-                {/* The id alone: it is the string adoption writes, and the
+-                    capacities the endpoint reported are adopted with it and
+-                    editable in the row that appears. */}
+-                <span className={styles['candidateId']}>{candidate.id}</span>
+-              </label>
+-            </li>
+-          ))}
+-        </ul>
++        <div className={styles['fetchPicker']} onKeyDown={onPickerKeyDown}>
++          <div className={styles['fetchSearch']}>
++            <IconSearchOutline16 className={styles['fetchSearchIcon']} />
++            <input
++              ref={searchRef}
++              className={styles['fetchSearchInput']}
++              type="text"
++              value={filter}
++              placeholder={t('fetchSearchPlaceholder')}
++              aria-label={t('fetchSearchAria')}
++              onChange={(event) => { setFilter(event.target.value) }}
++              onKeyDown={(event) => {
++                // First Esc clears the search; a second press closes the dialog
++                // (the Modal's own Escape listener only sees the event while
++                // this handler does not stop its propagation — i.e. empty box).
++                if (event.key === 'Escape' && filter.length > 0) {
++                  setFilter('')
++                  event.stopPropagation()
++                }
++              }}
++            />
++            {filter.length > 0
++              ? (
++                <button
++                  type="button"
++                  className={styles['fetchSearchClear']}
++                  aria-label={t('fetchClearSearch')}
++                  onClick={() => { setFilter('') }}
++                >
++                  <IconCloseOutline16 size={12} />
++                </button>
++              )
++              : null}
++          </div>
++          <div className={styles['fetchSelectionBar']}>
++            <label className={styles['fetchMaster']}>
++              <input
++                ref={masterRef}
++                type="checkbox"
++                checked={allVisiblePicked}
++                onChange={toggleAllVisible}
++                aria-label={t('fetchSelectAll')}
++              />
++              <span>{t('fetchSelectAll')}</span>
++            </label>
++            <button
++              type="button"
++              className={styles['linkButton']}
++              disabled={picked.size === 0}
++              onClick={() => { clearVisible(visibleIds) }}
++            >
++              {t('fetchClearSelection')}
++            </button>
++            <span className={styles['fetchCount']} aria-live="polite">
++              {countText}
++            </span>
++          </div>
++          {query.length > 0 && filtered.length === 0
++            ? (
++              <p className={styles['fetchNoResults']}>
++                {t('fetchNoResults')}
++                {' '}
++                <button
++                  type="button"
++                  className={styles['linkButton']}
++                  onClick={() => { setFilter('') }}
++                >
++                  {t('fetchClearSearch')}
++                </button>
++              </p>
++            )
++            : null}
++          <ul className={styles['candidateList']} role="group" aria-label={t('fetchTitle')}>
++            {filtered.map((candidate) => {
++              const selected = picked.has(candidate.id)
++              return (
++                <li key={candidate.id} className={`${styles['candidate']}${selected ? ` ${styles['candidateSelected']}` : ''}`}>
++                  <label className={styles['candidateLabel']}>
++                    <input
++                      className={styles['candidateInput']}
++                      type="checkbox"
++                      checked={selected}
++                      onChange={() => { toggle(candidate.id) }}
++                    />
++                    {/* The id alone: it is the string adoption writes, and the
++                        capacities the endpoint reported are adopted with it and
++                        editable in the row that appears. */}
++                    <span className={`${styles['candidateBox']}${selected ? ` ${styles['candidateBoxChecked']}` : ''}`} aria-hidden>
++                      {selected ? <IconCheckOutline14 size={12} /> : null}
++                    </span>
++                    <span className={styles['candidateId']}>{candidate.id}</span>
++                  </label>
++                </li>
++              )
++            })}
++          </ul>
++        </div>
+       </Modal>
+     </section>
+   )
+diff --git a/packages/client/ui-settings-models/src/client/ModelsSection.module.css b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+index 5203524517..4eedda3b4d 100644
+--- a/packages/client/ui-settings-models/src/client/ModelsSection.module.css
++++ b/packages/client/ui-settings-models/src/client/ModelsSection.module.css
+@@ -634,7 +634,7 @@ select.input {
+ }
+ 
+ .fetchDialog {
+-  max-width: 520px;
++  max-width: 680px;
+ 
+   /* The candidate list scrolls inside this dialog, an elevated surface, so the
+      scrollbar indirection is rebound here rather than on the scrolling child:
+@@ -673,3 +673,143 @@ select.input {
+   font-size: 13px;
+   overflow-wrap: anywhere;
+ }
++
++/* --- Fetch-available-models picker: search, bulk selection, row states --- */
++
++.fetchPicker {
++  display: flex;
++  flex-direction: column;
++  gap: 10px;
++}
++
++.fetchSearch {
++  position: relative;
++  display: flex;
++  align-items: center;
++}
++
++.fetchSearchIcon {
++  position: absolute;
++  left: 8px;
++  color: var(--dsw-alias-label-dimmed);
++  pointer-events: none;
++}
++
++.fetchSearchInput {
++  width: 100%;
++  border: 1px solid var(--dsw-alias-border-l2);
++  border-radius: 6px;
++  background: var(--dsw-alias-bg-layer-1);
++  color: var(--dsw-alias-label-primary);
++  font-size: 13px;
++  line-height: 20px;
++  padding: 5px 26px 5px 28px;
++}
++
++.fetchSearchInput:focus {
++  outline: none;
++  border-color: var(--dsw-alias-brand-primary);
++}
++
++.fetchSearchInput::placeholder {
++  color: var(--dsw-alias-label-dimmed);
++}
++
++.fetchSearchClear {
++  position: absolute;
++  right: 4px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 20px;
++  height: 20px;
++  border: none;
++  border-radius: 4px;
++  background: transparent;
++  color: var(--dsw-alias-label-tertiary);
++  cursor: pointer;
++  padding: 0;
++}
++
++.fetchSearchClear:hover {
++  background: var(--dsw-alias-interactive-bg-hover);
++  color: var(--dsw-alias-label-secondary);
++}
++
++.fetchSelectionBar {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: 8px 12px;
++  min-height: 20px;
++}
++
++.fetchMaster {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 13px;
++  color: var(--dsw-alias-label-secondary);
++  cursor: pointer;
++  user-select: none;
++}
++
++.fetchCount {
++  margin-left: auto;
++  font-size: 12px;
++  color: var(--dsw-alias-label-tertiary);
++  white-space: nowrap;
++}
++
++.fetchNoResults {
++  margin: 0;
++  padding: 10px 8px;
++  font-size: 13px;
++  color: var(--dsw-alias-label-tertiary);
++}
++
++/* Custom checkbox: the native input stays for accessibility, the box is styled. */
++.candidateInput {
++  position: absolute;
++  width: 1px;
++  height: 1px;
++  opacity: 0;
++  overflow: hidden;
++}
++
++.candidateBox {
++  flex: none;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 16px;
++  height: 16px;
++  border: 1px solid var(--dsw-alias-border-l3);
++  border-radius: 4px;
++  color: var(--dsw-alias-label-primary-foreground);
++  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
++}
++
++.candidateBoxChecked {
++  background: var(--dsw-alias-brand-primary);
++  border-color: var(--dsw-alias-brand-primary);
++}
++
++.candidateLabel:hover .candidateBox:not(.candidateBoxChecked) {
++  border-color: var(--dsw-alias-brand-primary);
++}
++
++.candidateInput:focus-visible + .candidateBox {
++  outline: 2px solid var(--dsw-alias-brand-primary);
++  outline-offset: 1px;
++}
++
++.candidateSelected {
++  background: var(--dsw-alias-interactive-bg-hover);
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .candidateBox {
++    transition: none;
++  }
++}
+diff --git a/packages/client/ui-settings-models/src/client/ProviderEditor.tsx b/packages/client/ui-settings-models/src/client/ProviderEditor.tsx
+index 63d25b2eb6..36c42c3053 100644
+--- a/packages/client/ui-settings-models/src/client/ProviderEditor.tsx
++++ b/packages/client/ui-settings-models/src/client/ProviderEditor.tsx
+@@ -38,7 +38,7 @@ import type { en } from './locales.ts'
+ import styles from './ModelsSection.module.css'
+ 
+ /** Per-adapter-family curated field sets (unknown namespaces get the hint alone). */
+-type EditorLayout = 'deepseek' | 'pi-ai' | 'unknown'
++type EditorLayout = 'deepseek' | 'pi-ai' | 'commandcode' | 'unknown'
+ 
+ /** The public DeepSeek endpoint shown as the deepseek base-URL placeholder. */
+ const DEEPSEEK_PUBLIC_BASE_URL = 'https://api.deepseek.com'
+@@ -125,6 +125,11 @@ export function pathOps(
+ function layoutOf(ns: string): EditorLayout {
+   if (ns === 'llm-deepseek') return 'deepseek'
+   if (ns === 'llm-pi-ai') return 'pi-ai'
++  // The commandcode provider ships the same profile shape as the curated
++  // families — credential reference, baseURL, and a `models` catalog — so it
++  // reuses the pi-ai field set (key + baseURL + model list) without the
++  // hand-declared-route protocol select.
++  if (ns === 'llm-commandcode') return 'commandcode'
+   return 'unknown'
+ }
+ 
+@@ -238,7 +243,8 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
+     const ns = namespace.ns
+     // A pi-ai profile names the conventional reference only when this page is
+     // about to store a key. Otherwise the provider keeps its native auth path.
+-    const next = layout === 'pi-ai' && stringAt(draft, 'apiKeyEnv') === undefined
++    const next = (layout === 'pi-ai' || layout === 'commandcode')
++      && stringAt(draft, 'apiKeyEnv') === undefined
+       && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
+       ? setPath(draft, ['apiKeyEnv'], keyRef)
+       : draft
+@@ -331,7 +337,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
+    * narrowed so the per-family branches below are total: an unknown namespace
+    * renders the hint instead and never reaches this body.
+    */
+-  const curatedFields = (family: 'deepseek' | 'pi-ai'): ReactNode => {
++  const curatedFields = (family: 'deepseek' | 'pi-ai' | 'commandcode'): ReactNode => {
+     // What a hand-declared route names for itself and nothing else can supply.
+     // A whole-section `llm-deepseek` profile is a composition fact with no
+     // per-route identity for its schema to carry, hence the family test.
+diff --git a/packages/client/ui-settings-models/src/client/locales.ts b/packages/client/ui-settings-models/src/client/locales.ts
+index a49a4f0ef2..ef6607bb07 100644
+--- a/packages/client/ui-settings-models/src/client/locales.ts
++++ b/packages/client/ui-settings-models/src/client/locales.ts
+@@ -73,6 +73,15 @@ export const en = {
+   fetchTitle: 'Choose models to add',
+   fetchDescription: 'These are the models this provider has available. Choose the ones to add.',
+   fetchAdopt: 'Add selected',
++  fetchSearchPlaceholder: 'Search models…',
++  fetchSearchAria: 'Search models',
++  fetchClearSearch: 'Clear search',
++  fetchSelectAll: 'Select all',
++  fetchClearSelection: 'Clear selection',
++  fetchSelectedCount: 'Selected {n} of {total}',
++  fetchVisibleCount: 'Showing {n} of {total}',
++  fetchNoResults: 'No models match your search.',
++  fetchAdoptCount: 'Add selected ({n})',
+   customAdd: 'Add a custom provider',
+   customTitle: 'Custom provider',
+   customTag: 'Custom',
+@@ -173,6 +182,15 @@ export const zh: { [Key in keyof typeof en]: string } = {
+   fetchTitle: '选择要添加的模型',
+   fetchDescription: '以下是模型提供方的可用模型，勾选要添加的模型。',
+   fetchAdopt: '添加所选',
++  fetchSearchPlaceholder: '搜索模型…',
++  fetchSearchAria: '搜索模型',
++  fetchClearSearch: '清除搜索',
++  fetchSelectAll: '全选',
++  fetchClearSelection: '取消全选',
++  fetchSelectedCount: '已选 {n} / {total}',
++  fetchVisibleCount: '显示 {n} / {total}',
++  fetchNoResults: '没有匹配的模型。',
++  fetchAdoptCount: '添加所选（{n}）',
+   customAdd: '添加自定义提供方',
+   customTitle: '自定义提供方',
+   customTag: '自定义',
