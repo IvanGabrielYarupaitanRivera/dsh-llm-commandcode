@@ -14,6 +14,7 @@ It speaks the official
 [Command Code Provider API](https://commandcode.ai/docs/provider)
 (`/alpha/generate`) — the same wire format the popular `pi-cleancache-commandcode`
 extension uses for Pi — and translates it to the harness `StreamChunk` protocol.
+Written in TypeScript; ships prebuilt `lib/`.
 
 ## Requirements
 
@@ -88,6 +89,35 @@ translates the SSE event stream (`text-delta`, `reasoning-delta`, `tool-call`,
 harness `TokenUsage` shape. Errors map to stable harness codes (`AUTH`,
 `RATE_LIMIT`, `QUOTA`, `TRANSPORT`, …).
 
+## Structure
+
+```
+src/
+├── types.ts      CommandCode wire vocabulary + configuration shapes
+├── config.ts     Schemastery schema, defaults, validation
+├── messages.ts   Harness history → CommandCode messages (+ tools)
+├── serialize.ts  Request envelope, headers, deterministic JSON
+├── sse.ts        One-line SSE event parser
+├── translate.ts  Events → harness StreamChunks (+ usage mapping)
+├── errors.ts     HTTP/transport errors → stable LlmError codes
+├── request.ts    fetch + SSE stream driver for one call
+├── adapter.ts    CommandCodeAdapter (the LlmAdapter implementation)
+├── discovery.ts  "Fetch available models" interrogation
+└── index.ts      Cordis plugin entry (registration, settings, credentials)
+```
+
+## Development
+
+```sh
+npm install          # or: pnpm install
+npm run build        # tsc → lib/ (ship lib/ so git installs need no build)
+COMMANDCODE_API_KEY=user_... npm run test:standalone
+```
+
+During local development against a harness checkout, the `node_modules`
+junctions for `@deepseek-ai/*` resolve through the checkout's packages; the
+published package declares its real dependencies in `package.json`.
+
 ## Known limitations
 
 - **Text-only for now.** Catalog models declare `[text]` input; images are
@@ -105,14 +135,6 @@ harness `TokenUsage` shape. Errors map to stable harness codes (`AUTH`,
 - **Subscription terms.** Using your CommandCode subscription through third-party
   clients is your responsibility — check your plan's terms.
 
-## Development
-
-```sh
-# Local test against the real API (needs COMMANDCODE_API_KEY):
-# deps resolve through the parent harness checkout's node_modules
-COMMANDCODE_API_KEY=user_... node test-standalone.mjs
-```
-
 ## License
 
 MIT
@@ -124,6 +146,7 @@ MIT
 **Proveedor de Command Code para DeepSeek Harness.** Usa tu suscripción de
 CommandCode (DeepSeek, Claude, GPT, Gemini y más de 30 modelos) como proveedor
 de modelos dentro del arnés — instala, pega tu clave, elige un modelo y listo.
+Escrito en TypeScript; el paquete incluye `lib/` ya compilado.
 
 **Instalación:**
 
@@ -139,6 +162,9 @@ variable de entorno.
 (`/alpha/generate`, eventos SSE `text-delta`/`reasoning-delta`/`tool-call`/
 `finish`) al idioma que DeepSeek Harness entiende (`StreamChunk`), con soporte
 de razonamiento, herramientas, tokens de caché y errores estandarizados.
+
+**Desarrollo:** `npm install` → `npm run build` → `COMMANDCODE_API_KEY=user_...
+npm run test:standalone`.
 
 **Limitaciones conocidas:** solo texto (sin imágenes por ahora); `off` puede no
 desactivar el razonamiento si el backend piensa por defecto; el protocolo es
