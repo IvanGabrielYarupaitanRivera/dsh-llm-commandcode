@@ -1,0 +1,10 @@
+# dsh-llm-commandcode bundle layer.
+# When this bundle is installed into a profile, this row mounts the plugin and
+# activates the `commandcode` provider route. Users can override every field
+# through the Web UI (Settings → Models) or a `llm-commandcode:` section in
+# $DSH_HOME/settings.yaml.
+- insert:
+    - id: llm-commandcode
+      name: 'dsh-llm-commandcode'
+      config:
+        apiKeyEnv: COMMANDCODE_API_KEY

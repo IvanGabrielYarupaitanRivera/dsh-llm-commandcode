@@ -1,0 +1,50 @@
+{
+  "name": "dsh-llm-commandcode",
+  "version": "0.1.0",
+  "description": "Command Code provider for DeepSeek Harness — use your CommandCode subscription (DeepSeek, Claude, GPT, Gemini and more) as a model provider.",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "adapter.js",
+    "config.js",
+    "discovery.js",
+    "messages.js",
+    "serialize.js",
+    "sse.js",
+    "translate.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "commandcode",
+    "llm",
+    "provider"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test:standalone": "node test-standalone.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.5",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.5"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
