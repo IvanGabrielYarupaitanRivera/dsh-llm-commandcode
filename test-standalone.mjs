@@ -2,12 +2,9 @@
 // Cordis runtime, against the real CommandCode API. Requires:
 //   COMMANDCODE_API_KEY=<user_...>
 // Usage: node test-standalone.mjs [model]
-//
-// Resolution note: this script resolves @deepseek-ai/dsh-llm through the local
-// repository checkout's node_modules (see .gitignore / README "Development").
 
-import { CommandCodeAdapter } from './adapter.js'
-import { normalizeConfig } from './config.js'
+import { CommandCodeAdapter } from './lib/adapter.js'
+import { normalizeConfig } from './lib/config.js'
 
 const model = process.argv[2] ?? 'deepseek/deepseek-v4-flash'
 const config = normalizeConfig({
@@ -35,7 +32,7 @@ try {
     messages: [{
       id: 'msg-1',
       role: 'user',
-      content: [{ type: 'text', text: 'Reply with exactly one line: HOLA-PLUGIN-OK' }],
+      content: [{ type: 'text', text: 'Reply with exactly one line: HOLA-PLUGIN-TS-OK' }],
     }],
     signal: AbortSignal.timeout(120_000),
   })) {
