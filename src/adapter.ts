@@ -90,6 +90,7 @@ export class CommandCodeAdapter extends LlmAdapter {
       system,
       maxTokens: options.maxTokens ?? config.defaultMaxTokens,
       temperature: options.temperature,
+      stop: options.stop,
       thinking: mapThinking(options.reasoningEffort, config),
       // A stable thread id per session keeps the proxy's prefix cache warm.
       threadId: options.sessionId !== undefined ? String(options.sessionId) : randomUUID(),
